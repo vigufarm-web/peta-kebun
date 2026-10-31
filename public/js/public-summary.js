@@ -1,0 +1,31 @@
+import {weeklyProgressCards} from './weekly-progress-cards.js';
+import {padiSummaryMarkup} from './padi-summary.js';
+import {cropLabel} from './crop-labels.js';
+import {progressMarkup} from './progress-matrix.js';
+import {climateChartMarkup} from './climate-chart.js';
+import {periodSummaryMarkup,harvestSummaryMarkup} from './period-summary.js';
+import {planSummaryMarkup} from './year-plan.js?v=simple-plant-plan-20261027';
+import {renderPublicDaily} from './daily-public.js';
+import {fullReportControl} from './full-report.js';
+const num=v=>Number(v||0).toLocaleString('id-ID',{maximumFractionDigits:2});
+const api={get:async url=>{const r=await fetch(url,{signal:AbortSignal.timeout(60000)}),d=await r.json();if(!r.ok)throw new Error(d.error||'Data belum dapat dimuat');return d;}};
+export async function renderPublicSummary(host,A){
+ host.classList.add('summary-page');host.innerHTML=`<div class="sum-hero"><div><p class="sum-eyebrow">PT VIGU FARM INDONESIA</p><h1>Ringkasan & kegiatan kebun</h1><p>Total hasil, rencana kerja, progres dan dokumentasi kegiatan.</p></div><a class="btn" href="/daily">Buka Daily Report</a></div><nav class="public-module-nav"><a href="/#/hub/pisang">${cropLabel('Pisang')}</a><a href="/#/hub/padi">${cropLabel('Padi')}</a><a href="/#/hub/infra">Infra</a><a href="/#/hub/iklim">Iklim</a><a href="/kebun">Target & rencana sampai Desember</a><a href="/daily">Daily & foto kegiatan</a>${A?.tables&&Object.keys(A.tables).some(t=>A.can(t))?'<a href="/#/excel">📥 Input Excel</a>':''}</nav><div id="sumFullReport" class="full-report-host"></div><p id="sumStatus" role="status">Memuat data terbaru…</p><section aria-label="Laporan Pisang"><h2 class="crop-section-title">${cropLabel('Pisang')}</h2><div id="sumFigures" class="sum-figures"></div><div id="sumTotals"></div><div id="sumHarvest"></div><div id="sumYearPlan"></div><section class="sum-panel"><div class="sum-section-head"><h2>Rencana & realisasi kerja Pisang · minggu ini</h2><span id="sumWeek"></span></div><div id="sumWeekly" class="sum-weekly"></div></section><section class="sum-panel"><div class="sum-section-head"><h2>Progres Pisang per blok</h2><label>Cari blok<input type="search" id="sumSearch" placeholder="Contoh D04"></label></div><p id="sumArea" class="muted"></p><div id="sumBlocks"></div></section></section><section aria-label="Laporan Padi"><h2 class="crop-section-title">${cropLabel('Padi')}</h2><div id="padiFigures"></div><div id="padiTotals"></div></section><section aria-label="Iklim dan GIS"><h2 class="crop-section-title">Iklim & GIS kebun</h2><div id="gisFigures" class="sum-figures"></div><div id="climateCharts"></div><div id="climateTotals"></div></section><div id="publicDailySection"></div>`;
+ fullReportControl(host.querySelector('#sumFullReport'),A);
+ const request=A?.api||api;
+ const daily=renderPublicDaily(host.querySelector('#publicDailySection'),A||{api:request},{intro:false});
+ try{const [totals,plan,padi]=await Promise.all([request.get('/api/summary-periods'),request.get('/api/kebun-plan'),request.get('/api/padi-summary')]);if(!host.querySelector('#sumTotals'))return;const progress=plan.progress,all=totals.periods.find(p=>p.key==='all'),stock=all.pisang.stock;
+ const tiles=rows=>rows.map(([label,value,note])=>`<article class="sum-tile"><span>${cropLabel(label)}</span><strong>${value}</strong><small>${note}</small></article>`).join('');
+ host.querySelector('#sumFigures').innerHTML=tiles([['Saldo bibit Pisang',num(stock)+' pokok','Seluruh batch yang tercatat'],['Sisa rencana tanam Pisang',num(plan.remainingHa)+' ha','Pada blok rencana tahun '+plan.year]]);
+ host.querySelector('#padiFigures').innerHTML=padiSummaryMarkup(padi);
+ host.querySelector('#gisFigures').innerHTML=tiles([['Luas milik kebun',num(progress.ownedAreaHa)+' ha','Berdasarkan persil GIS']]);
+ host.querySelector('#sumTotals').innerHTML=periodSummaryMarkup(totals,'pisang');
+ host.querySelector('#sumHarvest').innerHTML=harvestSummaryMarkup(totals);
+ host.querySelector('#padiTotals').innerHTML=periodSummaryMarkup(totals,'padi');
+ host.querySelector('#climateTotals').innerHTML=periodSummaryMarkup(totals,'iklim');
+ host.querySelector('#climateCharts').innerHTML=climateChartMarkup(totals.periods.find(p=>p.key==='month'));
+ host.querySelector('#sumYearPlan').innerHTML=planSummaryMarkup(plan);host.querySelector('#sumWeek').textContent=progress.from+' – '+progress.to;
+ host.querySelector('#sumWeekly').innerHTML=weeklyProgressCards(progress.weekly);
+ host.querySelector('#sumArea').textContent=progress.blocks.length+' blok pada tabel · luas blok terpantau '+num(progress.area)+' ha · maksimal 100% tiap tahap';const draw=()=>host.querySelector('#sumBlocks').innerHTML=progressMarkup(progress,host.querySelector('#sumSearch').value);host.querySelector('#sumSearch').oninput=draw;draw();host.querySelector('#sumStatus').textContent='Data per '+plan.today;
+ }catch(e){host.querySelector('#sumStatus').textContent=e.message;}await daily;
+}
