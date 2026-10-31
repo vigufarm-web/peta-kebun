@@ -683,7 +683,7 @@ export const SEED_SEKALI = {
 // kecepatan awal per kegiatan pisang (hari kerja per ha, 1 tim) = timeline Estimasi Land Prep v13 (data harian Mei–Sep 2026).
 // Diisi sekali ke Urutan Aktivitas bila kolomnya masih kosong; selanjutnya diubah di sana (form / Excel).
 export const KECEPATAN_AWAL = { 'Land Clearing': 2.98, 'Bajak 1': 2.44, 'Dolomite': 2.12, 'Bajak 2': 1.8, 'Stik Ridger': 1.17, 'Ridger': 1.53, 'Install Drip': 2, 'Stik Tanam': 4.07, 'Ecer Pupuk': 1.83, 'Tanam': 2.51 };
-export const SEED = {};
+export const SEED = Object.fromEntries(Object.keys(TABLES).map(k=>[k,[]]));
 
 // ------------------------------------------------------------ helper hitung
 export function padiKey(r) { return TABLES.padi_tanam.display(r); }
