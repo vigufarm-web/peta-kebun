@@ -2,16 +2,19 @@ import {reviewGIS} from './block-ui.js';
 const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),num=v=>v==null?'Belum tercatat':Number(v).toLocaleString('id-ID',{maximumFractionDigits:4});
 let user,catalog,map,mapLayer,layerControl,layers=[],ticket=0;const shownLayers=new Map();let selectedCommodity='Pisang';
 const status=(text,error=false)=>{$('#status').textContent=text;$('#status').className=error?'error':'';};
-async function request(path,method='GET',body){const r=await fetch(path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(90000)});const data=await r.json();if(!r.ok)throw Error(data.error||'Permintaan gagal');return data;}
+const SERVICE='https://laporankebun.vercel.app';
+let auth;try{auth=JSON.parse(sessionStorage.getItem('vigu-peta-session')||'null');if(auth?.expires<new Date().toISOString())auth=null;}catch{auth=null;}
+async function request(path,method='GET',body){const headers={...(body?{'Content-Type':'application/json'}:{}),...(auth?{Authorization:'Bearer '+auth.token}:{})};const r=await fetch(SERVICE+'/api/gis-client'+path.slice(4),{method,headers,credentials:'omit',body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(90000)});const data=await r.json();if(!r.ok){if(r.status===401){auth=null;sessionStorage.removeItem('vigu-peta-session');}throw Error(data.error||'Permintaan gagal');}return data;}
+
 const api={get:p=>request(p),post:(p,b)=>request(p,'POST',b)};
 const options=(values,selected='')=>values.map(v=>`<option value="${esc(v)}" ${v===selected?'selected':''}>${esc(v)}</option>`).join('');
 function modal(html){$('#modalBody').innerHTML=html;$('#modal').showModal();}$('#closeModal').onclick=()=>$('#modal').close();
 async function login(){
  $('#content').innerHTML='<form id="login" class="panel login"><h2>Masuk pengelola peta</h2><p class="muted">Gunakan akun admin Laporan Kebun yang sudah ada.</p><label>Nama pengguna<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Masuk</button></form>';
- $('#login').onsubmit=async e=>{e.preventDefault();const f=e.target,b=f.querySelector('button');b.disabled=true;try{await request('/api/login','POST',Object.fromEntries(new FormData(f)));await init();}catch(err){status(err.message,true);b.disabled=false;}};
+ $('#login').onsubmit=async e=>{e.preventDefault();const f=e.target,b=f.querySelector('button');b.disabled=true;try{const result=await request('/api/login','POST',Object.fromEntries(new FormData(f)));auth={token:result.token,expires:result.expires};sessionStorage.setItem('vigu-peta-session',JSON.stringify(auth));f.reset();await init();}catch(err){status(err.message,true);b.disabled=false;}};
 }
 async function init(){
- try{({user}=await request('/api/me'));$('#account').textContent=user?.nama||'';if(!user){status('Silakan masuk untuk membuka data peta.');return login();}if(!user.peran.includes('admin')){status('Pengelolaan peta memerlukan akun admin.',true);return;}
+ try{({user}=await request('/api/me'));$('#account').textContent=user?.nama||'';$('#logout').hidden=!user;if(!user){status('Silakan masuk untuk membuka data peta.');return login();}if(!user.peran.includes('admin')){status('Pengelolaan peta memerlukan akun admin.',true);return;}
  const params=new URLSearchParams(location.search),app=params.get('connect'),channel=params.get('channel');
  if(['payrol','gudang'].includes(app)&&/^[a-zA-Z0-9-]{20,100}$/.test(channel||'')&&window.opener){
   $('#content').innerHTML=`<section class="panel"><h2>Hubungkan ${esc(app==='payrol'?'Payroll':'Gudang')} ke Peta Kebun</h2><p>Aplikasi akan menerima izin baca nama blok, luas, kelompok tanam, tanggal tanam, dan siklus selama 8 jam. Tidak ada izin mengubah peta, melihat upah, atau membaca token GitHub.</p><button id="grant" class="primary">Izinkan baca referensi GIS</button></section>`;
@@ -71,3 +74,5 @@ async function upload(e){
  }catch(err){status(err.message,true);}finally{e.target.value='';}
 }
 init();
+
+$('#logout').onclick=async()=>{try{await request('/api/logout','POST',{});}finally{auth=null;sessionStorage.removeItem('vigu-peta-session');location.reload();}};
